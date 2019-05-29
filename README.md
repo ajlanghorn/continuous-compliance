@@ -107,7 +107,7 @@ Requirement 4.3 of the Center for Internet Security's AWS Fundamentals benchmark
 
 We can programatically determine whether or not a given VPC has VPC Flow Logs enabled using a custom AWS Config rule. Custom rules make use of Lambda functions to evaluate the state of a given resource.
 
-The following Python snippet will determine whether or not VPC Flow Logs are enabled, by returning one of `NOT_APPLICABLE`, `COMPLIANT` or `NONCOMPLIANT`.
+The following Python snippet will determine whether or not VPC Flow Logs are enabled, by returning one of `NOT_APPLICABLE`, `COMPLIANT` or `NONCOMPLIANT`. We're going to use the following in a Lambda function, but - first - let's take a look at what it does:
 
 ```
 import boto3, json
@@ -167,4 +167,39 @@ There are a few different functions in the above Python snippet:
 
 - Finally, the Config API provides us with `put_evaluations`, where we push an evaluation to Config. Config records the resource type, resource ID, `compliance_value`, an explaining annotation and a timestamp by which to order the evaluations.
 
-Lambda functions need a role to
+To get started, we need to create an IAM role through which our Lambda function can operate. Lambda requires, at a minimum, the `AWSLambdaExecute` policy to be attached to its role, but since we also wish to interrogate a VPC (which uses the EC2 API), and allow Config to execute our Lambda function, we need to also ensure we add the `AmazonEC2ReadOnlyAccess` and `AWSConfigRulesExecutionRole` policies.
+
+1. Open the IAM console, at https://console.aws.amazon.com/iam
+1. On the left, choose Roles, then click the blue Create Role button at the top of the page
+1. Choose 'AWS Service' for the type of trusted entity, and then 'Lambda' for the specific service. Click Next.
+1. Using the search box, filter for, and then check, the `AWSLambdaExecute`, `AWSConfigRulesExecutionRole` and `AmazonEC2ReadOnlyAccess` policies.
+1. Skip the step where you add tags - if this was your real organisation, though, you'd be advised to add tags here.
+1. For RoleName, use `GRC338-ContinuousCompliance`. Check that there are three attached policies. Click Create Role.
+
+Next, we need to create our Lambda function. We're going to do this in the Console again, too.
+
+1. Open the Lambda console, at https://console.aws.amazon.com/lambda
+1. Click Create Function, and then choose Author From Scratch.
+1. Use `GRC338-ContinuousCompliance-CIS-4-3` for the name of the function, and choose the Python 3.7 runtime.
+1. Under Permissions, click `Choose or create an execution role`, and then click `Use an existing role`.
+1. In the Existing Role drop-down that appears, choose `GRC338-ContinuousCompliance`.
+
+Lambda sends us to the Function Designer, where we can see our Lambda function, along with what triggers it and what it can interrogate, trigger or describe. Nothing currently triggers our function, so the left side is empty. On the right, however, we can see a number of services, including Config, CloudWatch, CloudWatch Logs, EC2, EC2 Auto Scaling, ELB and S3. These services are added because Lambda has interrogated the execution role and worked out what services that role gives our Lambda function access to.
+
+Scroll down the page to the Function Code section. Delete the existing boilerplate code, and paste the code from above in to the box.
+
+The Lambda function designer does not save changes automatically, so we need to save our function at this point. To do this, scroll to the top and click the orange Save button at the top right of the page.
+
+By default, our Lambda function will only run for a maximum of three seconds. In some cases, however, we need to run a Lambda function for longer than this, especially when we have a dependency on an external API to respond, as is the case here. We are issuing calls to the EC2 API to request information about a VPC. Amend the timeout to 0min 30sec.
+
+Click Save once again.
+
+We are now ready to test our Lambda function returns correctly. To do this, we'll use Lambda's in-built testing functionality.
+
+1. Along the top of the page, click the drop-down next to Test
+1. Click 'Configure test events', and then choose 'Create new test event'
+1. Leave the event template set to 'Hello World', and give test event the name `GRC338`
+1. Leave the included JSON in the box, and click Create
+1. Finally, choose the GRC338 test event from the drop-down and click Test
+
+
