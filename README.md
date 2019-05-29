@@ -229,3 +229,51 @@ We are now ready to test our Lambda function returns correctly. To do this, we'l
 # Step 3: Create the Config rule
 
 Earlier, in step one, we created an IAM role for our Config rule to use, and in step two, we created a Lambda function which used a role to grant permissions, through a policy, to be run by AWS Config Rules. With our IAM permissions created, and our Lambda function in place, we now need to tie Lambda and Config together.
+
+To enable Config, we can either use the AWS Console, or we can execute the creation of a `Configuration Recorder` using the CLI, as such:
+
+```
+aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=CONFIGROLEARN --recording-group allSupported=true,includeGlobalResourceTypes=true
+```
+
+Replace `CONFIGROLEARN` with the ARN of the role you created for Config in Step 1 above.
+
+We also need to create a `Delivery Channel`, which Config uses to deliver results of configuration changes to. This is where we make use of the S3 bucket and SNS topic we created in Step 1 above. To do this, create a file called `deliverychannel.json`, with the following contents:
+
+```
+{
+  "name": "default",
+  "s3BucketName": "S3BUCKETNAME",
+  "snsTopicArn": "SNSTOPICARN",
+  "configSnapshotDeliveryProperties": {
+    "deliveryFrequency": "One_Hour"
+  }
+}
+```
+
+Once saved, run:
+
+```
+aws configservice put-delivery-channel --delivery-channel file://deliverychannel.json
+```
+
+Config takes a few moments to initially discover resources in an account, after which it will start to become useful as a centralised inventory.
+
+Whilst Config does that, let's add a Config rule. We can add these via the CLI, but the Console gives us a hint as to other rules already made available to us that we can just start using.
+
+1. Navigate to https://console.aws.amazon.com/config
+1. Confirm that the region is set to "N. Virginia" at the top right of the page
+1. Click Rules on the left.
+
+You'll see a list of managed rules - these are rules made available to customers which are managed by AWS. They take a variety of inputs to provide their intended usefulness. The `approved-amis-by-id` rule, for example, takes a list of AMI IDs.
+
+1. Click Add Custom Rule at the top
+1. Enter `GRC338-ContinuousCompliance-CIS-4-3` as the custom rule name
+1. Enter the ARN of the Lambda function you created in Step 2
+
+Config Rules can be triggered either by configuration changes, such as Config detecting a VPC's properties have been updated, or periodically. Rules triggered periodically can be checked with a minimum of one hour, up to 24 hours.
+
+1. Choose 'Periodic' for the trigger type, and set the frequency to one hour.
+1. Skip the Rule Parameters and Remediation Actions sections.
+
+Were we to wish to remediate automatically, we would set the remediation action to a Systems Manager Automation document, either created for us from an existing template or created by us using Systems Manager.
