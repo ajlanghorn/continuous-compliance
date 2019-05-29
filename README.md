@@ -74,7 +74,7 @@ To do this, firstly copy the following in to a new file called `assumerolepolicy
 
 Next, run:
 
-``
+```
 aws iam create-role --role-name GRC338-ContinuousCompliance-ConfigRole --assume-role-policy-document file://assumerolepolicy.json
 ```
 
