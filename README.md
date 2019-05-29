@@ -244,7 +244,7 @@ We also need to create a `Delivery Channel`, which Config uses to deliver result
 {
   "name": "default",
   "s3BucketName": "S3BUCKETNAME",
-  "snsTopicArn": "SNSTOPICARN",
+  "snsTopicARN": "SNSTOPICARN",
   "configSnapshotDeliveryProperties": {
     "deliveryFrequency": "One_Hour"
   }
