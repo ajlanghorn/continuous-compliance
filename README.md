@@ -21,6 +21,12 @@ Before we begin to build, you'll need:
 
 To test you have things set up correctly, you can run `aws sts get-caller-identity`. The response to this command should contain your account number and the name of your IAM user.
 
+Next, set the `AWS_DEFAULT_REGION` environment variable, as follows:
+
+```
+export AWS_DEFAULT_REGION="us-east-1"
+```
+
 Finally, create an environment variable referencing your AWS account number, as follows:
 
 ```
@@ -34,7 +40,7 @@ AWS Config requires access to an Amazon S3 bucket in order to store compliance r
 To start with, let's create an Amazon S3 bucket:
 
 ```
-aws s3 mb $CC_AWS_ACCOUNT-config
+aws s3 mb s3://$CC_AWS_ACCOUNT-config
 ```
 
 You should now see a new S3 bucket, named 'config', and prefixed with your account number. This is where Config will store its findings as it monitors for configuration changes over time.
@@ -49,7 +55,7 @@ The CLI should return the topic's ARN in response.
 
 Finally, for this step, we're going to create an IAM role. This role will allow Config to access the S3 bucket and SNS topic we created above, and get configuration details for services that are supported by Config. Supported services and resources are [documented on the AWS website](https://docs.aws.amazon.com/config/latest/developerguide/resource-config-reference.html).
 
-To do this, firstly copy the following in to a new file:
+To do this, firstly copy the following in to a new file called `assumerolepolicy.json`:
 
 ```
 {
@@ -59,16 +65,22 @@ To do this, firstly copy the following in to a new file:
    "Effect": "Allow",
    "Principal": {
    "Service": "config.amazonaws.com"
-  },
+   },
   "Action": "sts:AssumeRole"
   }
  ]
 }
 ```
 
+Next, run:
+
+``
+aws iam create-role --role-name GRC338-ContinuousCompliance-ConfigRole --assume-role-policy-document file://assumerolepolicy.json
+```
+
 You should see details of your role returned to you in response, including the role name and the ARN.
 
-Now, we need to expand the scope of the IAM role to allow us access to S3 and SNS. To do this, use the following policy:
+Now, we need to expand the scope of the IAM role to allow us access to S3 and SNS. To do this, use the following policy, which you need to save locally as `ConfigRolePolicy.json`:
 
 ```
 {
@@ -99,7 +111,19 @@ Now, we need to expand the scope of the IAM role to allow us access to S3 and SN
 }
 ```
 
-Be sure to change the bucket name and the SNS topic ARN before you submit the request through the CLI.
+Be sure to change the bucket name and the SNS topic ARN.
+
+You need to create the policy, and then attach it, as follows:
+
+```
+aws iam create-policy --policy-name GRC338-ContinuousCompliance-ConfigRole-Policy --policy-document file://ConfigRolePolicy.json
+```
+
+This command will return you details, including the Policy ARN, which you need to substitute in place of `POLICYARN` below:
+
+```
+aws iam attach-role-policy --role-name GRC338-ContinuousCompliance-ConfigRole --policy-arn POLICYARN 
+```
 
 ## Step 2: Determining if VPC Flow Logs are enabled
 
@@ -202,4 +226,6 @@ We are now ready to test our Lambda function returns correctly. To do this, we'l
 1. Leave the included JSON in the box, and click Create
 1. Finally, choose the GRC338 test event from the drop-down and click Test
 
+# Step 3: Create the Config rule
 
+Earlier, in step one, we created an IAM role for our Config rule to use, and in step two, we created a Lambda function which used a role to grant permissions, through a policy, to be run by AWS Config Rules. With our IAM permissions created, and our Lambda function in place, we now need to tie Lambda and Config together.
