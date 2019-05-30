@@ -27,6 +27,11 @@ Next, set the `AWS_DEFAULT_REGION` environment variable, as follows:
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
+Next, install JQ since we're about to use it to interrogate a JSON response privided to us by the IAM API. Installation instructions are available at https://stedolan.github.io/jq/download/, but - in a nutshell - you'll be looking at running...
+
+- `sudo apt-get install jq` on Debian or Ubuntu
+- `brew install jq` on a Mac, assuming you have [Homebrew](https://brew.sh) installed
+
 Finally, create an environment variable referencing your AWS account number, as follows:
 
 ```
