@@ -277,3 +277,58 @@ Config Rules can be triggered either by configuration changes, such as Config de
 1. Skip the Rule Parameters and Remediation Actions sections.
 
 Were we to wish to remediate automatically, we would set the remediation action to a Systems Manager Automation document, either created for us from an existing template or created by us using Systems Manager.
+
+1. Click Save.
+
+You'll now notice that Config is evaluating your infrastructure against the rule you've just written! Give it a few moments and you should start to see a response arrive.
+
+## Step 4: Create an SNS topic subscription
+
+Earlier, we created an SNS topic and added the topic to the delivery channel which Config uses to send results of evaluated rules to. You can subscribe to a channel in a few different ways:
+
+- JSON-encoded messages via HTTP POST, with or without using HTTPS, or email
+- Messages, without JSON encoding, via email
+- SMS
+- SQS
+- SNS endpoint
+- Lambda
+
+When you choose certain types of subscription, you also need to specify an endpoint. For example, if you chose to use the SMS subscription type, you'd also need to add the phone number... otherwise, we don't know where to send a message to.
+
+To create an email subscription, run:
+
+```
+aws sns subscribe --topic-arn SNSTOPICARN --protocol email --notification-endpoint YOUREMAILADDRESS
+```
+
+Replace SNSTOPICARN and YOUREMAILADDRESS with the appropriate values.
+
+In response, SNS should return `Pending Confirmation`. We can now see our pending subscription by running:
+
+```
+aws sns list-subscriptions
+```
+
+There are multiple ways to confirm a subscription - SNS will have sent an email to you, so you could confirm the subscription by clicking the link in the email. Alternatively, you can run:
+
+```
+aws sns confirm-subscription --topic-arn SNSTOPICARN --token TOKEN
+```
+
+The value for TOKEN can be found by parsing the email sent to you.
+
+After you've subscribed, if you `list-subscriptions` once more, you should find that the `SubscriptionARN` field no longer references `Pending Confirmation`, but instead provides a full ARN.
+
+## Conclusion
+
+In this workshop, we created:
+
+- an S3 bucket
+- an SNS topic
+- a Lambda function
+- a Config Rule
+- and associated roles for Lambda and Config to make use of
+
+We now have a situation where detection of VPC Flow Logs is automated for us, and we are alerted when VPCs exist without Flow Logs.
+
+To expand this, we could look at using:
