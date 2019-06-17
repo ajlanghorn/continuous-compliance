@@ -38,6 +38,37 @@ Finally, create an environment variable referencing your AWS account number, as 
 export CC_AWS_ACCOUNT=`aws sts get-caller-identity | jq '.Account' | sed 's/"//g'`
 ```
 
+## Step 1: Create an evaluatable infrastructure
+
+Our evaluatable infrastructure is the infrastructure we'd be evaluating compliance of against a specific framework. In other words, it's where developers and IT staff would build out infrastructure in AWS. This is in contrast to infrastructure which is designed to do the evaluation of that infrastructure.
+
+For the purposes of this demonstration, we're going to create a fairly rudimentary VPC architecture, comprising a VPC and some Flow Logs.
+
+To do this, visit the VPC console at https://console.aws.amazon.com/vpc.
+
+1. Choose Your VPCs on the left menu, then click Create VPC.
+2. Use `evaluatable-infrastructure` as the VPC name.
+3. Use `10.0.0.0/16` for the VPC IPv4 CIDR block.
+4. Choose not to assign an IPv6 block.
+5. Set Tenancy to Default.
+
+Click Create, then close.
+
+Next, visit CloudWatch Logs, at https://console.aws.amazon.com/cloudwatch. Click Logs on the left side. You might need to click 'Let's get started' first to get past the splash screen. Once there, click Create Log Group. Use `GRC338-ContinuousCompliance` as the name. Click Create.
+
+Go back to the VPC console, as above.
+
+Right-click your new VPC, and choose Create Flow Log.
+
+1. Set Filter to All.
+2. Select CloudWatch Logs as the destination.
+3. Choose the relevant log group from the dropdown. If it doesn't appear, click the Refresh button.
+4. Below IAM role, click "Set Up Permissions" to create an appropriately-scoped IAM role.
+5. In the pop-up that opens, leave the default settings as they are, and click 'Allow'.
+6. Head back to the VPC Flow Logs wizard, and click the refresh button next to the IAM role drop-down.
+7. Choose your shiny new IAM role. It'll likely be called `flowlogsRole`.
+8. Click Create.
+
 ## Step 1: Set up Config
 
 AWS Config requires access to an Amazon S3 bucket in order to store compliance results, an SNS topic to send compliance results to the bucket from Config, and an IAM role to set the appropriate permissions for the IAM user, the S3 bucket and the SNS topic.
@@ -58,282 +89,71 @@ aws sns create-topic --name config
 
 The CLI should return the topic's ARN in response.
 
-Finally, for this step, we're going to create an IAM role. This role will allow Config to access the S3 bucket and SNS topic we created above, and get configuration details for services that are supported by Config. Supported services and resources are [documented on the AWS website](https://docs.aws.amazon.com/config/latest/developerguide/resource-config-reference.html).
+Visit the SNS console, and subscribe yourself to the topic you just created. To do this:
 
-To do this, firstly copy the following in to a new file called `assumerolepolicy.json`:
+1. Visit https://console.aws.amazon.com/sns
+2. From the left, choose Topics. If it doesn't appear, choose the hamburger icon.
+3. Choose your topic - it's probably called `config`
+4. Click the orange 'Create Subscription' button.
+5. Select Email for the protocol - if you wanted to send elsewhere, this would be where you do it.
+6. Enter a recipient email address.
+7. Click Create Subscription.
 
-```
-{
- "Version": "2012-10-17",
- "Statement": [
-  {
-   "Effect": "Allow",
-   "Principal": {
-   "Service": "config.amazonaws.com"
-   },
-  "Action": "sts:AssumeRole"
-  }
- ]
-}
-```
+You should receive an email asking you to confirm your subscription - the link to this will be in a JSON blob.
 
-Next, run:
+Finally, for this step, we're going to create an IAM role. This role will allow Config to access the S3 bucket and SNS topic we created above, and get configuration details for services that are supported by Config. Supported services and resources are [documented on the AWS website](https://docs.aws.amazon.com/config/latest/developerguide/resource-config-reference.html). To do this, visit the Config service, at https://console.aws.amazon.com/config. We're also going to set Config up to get it working.
 
-```
-aws iam create-role --role-name GRC338-ContinuousCompliance-ConfigRole --assume-role-policy-document file://assumerolepolicy.json
-```
+1. In the "Resource Types to Record" section, check "All Resources" to record changes to all supported resources in this region.
+2. Next, choose to use the existing Amazon S3 bucket you created above - remember: you created it in your account.
+3. Now, choose to stream configuration changes to an Amazon SNS topic, again choosing the SNS topic you previously created.
+4. Finally, tell Config to create a service-linked role for us.
+5. Skip the section about Rules at this time.
+6. Review your settings, and click Confirm.
 
-You should see details of your role returned to you in response, including the role name and the ARN.
-
-Now, we need to expand the scope of the IAM role to allow us access to S3 and SNS. To do this, use the following policy, which you need to save locally as `ConfigRolePolicy.json`:
-
-```
-{
- "Version": "2012-10-17",
- "Statement": [
-   {
-    "Effect": "Allow",
-    "Action": ["s3:PutObject"],
-    "Resource": ["arn:aws:s3:::BUCKETNAME/AWSLogs/*"],
-    "Condition":
-      {
-        "StringLike": {
-          "s3:x-amz-acl":"bucket-owner-full-control"
-        }
-      }
-    },
-    {
-     "Effect": "Allow",
-     "Action": ["s3:GetBucketAcl"],
-     "Resource": "arn:aws:s3:::BUCKETNAME"
-    },
-    {
-     "Effect": "Allow",
-     "Action": "sns:Publish",
-     "Resource": "SNSTOPICARN"
-    }
- ]
-}
-```
-
-Be sure to change the bucket name and the SNS topic ARN.
-
-You need to create the policy, and then attach it, as follows:
-
-```
-aws iam create-policy --policy-name GRC338-ContinuousCompliance-ConfigRole-Policy --policy-document file://ConfigRolePolicy.json
-```
-
-This command will return you details, including the Policy ARN, which you need to substitute in place of `POLICYARN` below:
-
-```
-aws iam attach-role-policy --role-name GRC338-ContinuousCompliance-ConfigRole --policy-arn POLICYARN 
-```
+We'll create a rule in the next step.
 
 ## Step 2: Determining if VPC Flow Logs are enabled
 
 Requirement 4.3 of the Center for Internet Security's AWS Fundamentals benchmark is to check whether or not VPC Flow Logs are enabled. A Flow Log allows you to capture, automatically, the IP traffic both orginating and destined from and for network interfaces inside a given VPC. These Flow Logs can then be published to Amazon S3 and Amazon CloudWatch Logs.
 
-We can programatically determine whether or not a given VPC has VPC Flow Logs enabled using a custom AWS Config rule. Custom rules make use of Lambda functions to evaluate the state of a given resource.
+1. Start by clicking 'Rules' on the left of the Config console.
 
-The following Python snippet will determine whether or not VPC Flow Logs are enabled, by returning one of `NOT_APPLICABLE`, `COMPLIANT` or `NONCOMPLIANT`. We're going to use the following in a Lambda function, but - first - let's take a look at what it does:
+You'll see a list of managed rules - these are rules made available to customers which are managed by AWS. They take a variety of inputs to provide their intended usefulness. The `approved-amis-by-id` rule, for example, takes a list of AMI IDs. We're going to make use of the `vpc-flow-logs-enabled` managed rule.
 
-```
-import boto3, json
+1. Search for the `vpc-flow-logs-enabled` rule.
 
-def evaluate_compliance(config_item, r_id):
-    if (config_item['resourceType'] != 'AWS::EC2::VPC'):
-        return 'NOT_APPLICABLE'
+You can edit the rule name and description, but it's best to keep them as descriptive as possible. Since you can change these names, you'll also see the `Managed Rule Name` field is pre-populated and can't be changed. It's default value is `VPC_FLOW_LOGS_ENABLED`.
 
-    elif is_flow_logs_enabled(r_id):
-        return 'COMPLIANT'
-    else:
-        return 'NON_COMPLIANT'
+2. Next to Trigger Type, ensure Periodic is checked, and set a frequency of 1 hour.
 
-def is_flow_logs_enabled(vpc_id):
-    ec2 = boto3.client('ec2')
-    response = ec2.describe_flow_logs(
-        Filter=[
-            {
-                'Name': 'resource-id',
-                'Values': [
-                    vpc_id,
-                ]
-            },
-        ],
-    )
-    if len(response[u'FlowLogs']) != 0: return True
-
-def lambda_handler(event, context):
-    
-    # Create AWS SDK clients & initialize custom rule parameters
-    config = boto3.client('config')
-    invoking_event = json.loads(event['invokingEvent'])
-    compliance_value = 'NOT_APPLICABLE'
-    resource_id = invoking_event['configurationItem']['resourceId']
-                    
-    compliance_value = evaluate_compliance(invoking_event['configurationItem'], resource_id)
-            
-    response = config.put_evaluations(
-       Evaluations=[
-            {
-                'ComplianceResourceType': invoking_event['configurationItem']['resourceType'],
-                'ComplianceResourceId': resource_id,
-                'ComplianceType': compliance_value,
-                'Annotation': 'CIS 4.3 VPC Flow Logs',
-                'OrderingTimestamp': invoking_event['notificationCreationTime']
-            },
-       ],
-       ResultToken=event['resultToken'])
-```
-There are a few different functions in the above Python snippet:
-
-- When the Lambda function is invoked, Lambda enters the `lambda_function` function. We've created the necessary SDKs and set up some initial variables for use later on. We've given these initial variables default responses, too.
-
-- The `evaluate_compliance` function contains the logic to determine whether or not VPC flow logs have been enabled. The result - essentially, `COMPLIANT` or `NONCOMPLIANT` is assigned to the `compliance_value` variable.
-
-- In `is_flow_logs_enabled`, we take the VPC ID as an input, and pass to the EC2 API in order to determine whether flow logs are enabled. We filter by the VPC determined by `resource_id`, and if the resulting character count is greater than 0, the function returns True.
-
-- Finally, the Config API provides us with `put_evaluations`, where we push an evaluation to Config. Config records the resource type, resource ID, `compliance_value`, an explaining annotation and a timestamp by which to order the evaluations.
-
-To get started, we need to create an IAM role through which our Lambda function can operate. Lambda requires, at a minimum, the `AWSLambdaExecute` policy to be attached to its role, but since we also wish to interrogate a VPC (which uses the EC2 API), and allow Config to execute our Lambda function, we need to also ensure we add the `AmazonEC2ReadOnlyAccess` and `AWSConfigRulesExecutionRole` policies.
-
-1. Open the IAM console, at https://console.aws.amazon.com/iam
-1. On the left, choose Roles, then click the blue Create Role button at the top of the page
-1. Choose 'AWS Service' for the type of trusted entity, and then 'Lambda' for the specific service. Click Next.
-1. Using the search box, filter for, and then check, the `AWSLambdaExecute`, `AWSConfigRulesExecutionRole` and `AmazonEC2ReadOnlyAccess` policies.
-1. Skip the step where you add tags - if this was your real organisation, though, you'd be advised to add tags here.
-1. For RoleName, use `GRC338-ContinuousCompliance`. Check that there are three attached policies. Click Create Role.
-
-Next, we need to create our Lambda function. We're going to do this in the Console again, too.
-
-1. Open the Lambda console, at https://console.aws.amazon.com/lambda
-1. Click Create Function, and then choose Author From Scratch.
-1. Use `GRC338-ContinuousCompliance-CIS-4-3` for the name of the function, and choose the Python 3.7 runtime.
-1. Under Permissions, click `Choose or create an execution role`, and then click `Use an existing role`.
-1. In the Existing Role drop-down that appears, choose `GRC338-ContinuousCompliance`.
-
-Lambda sends us to the Function Designer, where we can see our Lambda function, along with what triggers it and what it can interrogate, trigger or describe. Nothing currently triggers our function, so the left side is empty. On the right, however, we can see a number of services, including Config, CloudWatch, CloudWatch Logs, EC2, EC2 Auto Scaling, ELB and S3. These services are added because Lambda has interrogated the execution role and worked out what services that role gives our Lambda function access to.
-
-Scroll down the page to the Function Code section. Delete the existing boilerplate code, and paste the code from above in to the box.
-
-The Lambda function designer does not save changes automatically, so we need to save our function at this point. To do this, scroll to the top and click the orange Save button at the top right of the page.
-
-By default, our Lambda function will only run for a maximum of three seconds. In some cases, however, we need to run a Lambda function for longer than this, especially when we have a dependency on an external API to respond, as is the case here. We are issuing calls to the EC2 API to request information about a VPC. Amend the timeout to 0min 30sec.
-
-Click Save once again.
-
-We are now ready to test our Lambda function returns correctly. To do this, we'll use Lambda's in-built testing functionality.
-
-1. Along the top of the page, click the drop-down next to Test
-1. Click 'Configure test events', and then choose 'Create new test event'
-1. Leave the event template set to 'Hello World', and give test event the name `GRC338`
-1. Leave the included JSON in the box, and click Create
-1. Finally, choose the GRC338 test event from the drop-down and click Test
-
-# Step 3: Create the Config rule
-
-Earlier, in step one, we created an IAM role for our Config rule to use, and in step two, we created a Lambda function which used a role to grant permissions, through a policy, to be run by AWS Config Rules. With our IAM permissions created, and our Lambda function in place, we now need to tie Lambda and Config together.
-
-To enable Config, we can either use the AWS Console, or we can execute the creation of a `Configuration Recorder` using the CLI, as such:
-
-```
-aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=CONFIGROLEARN --recording-group allSupported=true,includeGlobalResourceTypes=true
-```
-
-Replace `CONFIGROLEARN` with the ARN of the role you created for Config in Step 1 above.
-
-We also need to create a `Delivery Channel`, which Config uses to deliver results of configuration changes to. This is where we make use of the S3 bucket and SNS topic we created in Step 1 above. To do this, create a file called `deliverychannel.json`, with the following contents:
-
-```
-{
-  "name": "default",
-  "s3BucketName": "S3BUCKETNAME",
-  "snsTopicARN": "SNSTOPICARN",
-  "configSnapshotDeliveryProperties": {
-    "deliveryFrequency": "One_Hour"
-  }
-}
-```
-
-Once saved, run:
-
-```
-aws configservice put-delivery-channel --delivery-channel file://deliverychannel.json
-```
-
-Config takes a few moments to initially discover resources in an account, after which it will start to become useful as a centralised inventory.
-
-Whilst Config does that, let's add a Config rule. We can add these via the CLI, but the Console gives us a hint as to other rules already made available to us that we can just start using.
-
-1. Navigate to https://console.aws.amazon.com/config
-1. Confirm that the region is set to "N. Virginia" at the top right of the page
-1. Click Rules on the left.
-
-You'll see a list of managed rules - these are rules made available to customers which are managed by AWS. They take a variety of inputs to provide their intended usefulness. The `approved-amis-by-id` rule, for example, takes a list of AMI IDs.
-
-1. Click Add Custom Rule at the top
-1. Enter `GRC338-ContinuousCompliance-CIS-4-3` as the custom rule name
-1. Enter the ARN of the Lambda function you created in Step 2
+VPC Flow Logs can detect three ACCEPT, REJECT and ALL traffic. We need to tell the rule what traffic we should be detecting and logging in the Flow Logs it detects. For this case, set the value of the `trafficType` tag to `ALL`.
 
 Config Rules can be triggered either by configuration changes, such as Config detecting a VPC's properties have been updated, or periodically. Rules triggered periodically can be checked with a minimum of one hour, up to 24 hours.
 
-1. Choose 'Periodic' for the trigger type, and set the frequency to one hour.
-1. Skip the Rule Parameters and Remediation Actions sections.
+3. Choose 'Periodic' for the trigger type, and set the frequency to one hour.
+4. Skip the Rule Parameters and Remediation Actions sections.
 
 Were we to wish to remediate automatically, we would set the remediation action to a Systems Manager Automation document, either created for us from an existing template or created by us using Systems Manager.
 
-1. Click Save.
+5. Finally, click Save, and then wait a few seconds. Click the Refresh button a few times, and wait until it's stopped evaluating. You'll then be able to see if you have compliant and non-compliant resources.
+
+6. Click Save.
 
 You'll now notice that Config is evaluating your infrastructure against the rule you've just written! Give it a few moments and you should start to see a response arrive.
-
-## Step 4: Create an SNS topic subscription
-
-Earlier, we created an SNS topic and added the topic to the delivery channel which Config uses to send results of evaluated rules to. You can subscribe to a channel in a few different ways:
-
-- JSON-encoded messages via HTTP POST, with or without using HTTPS, or email
-- Messages, without JSON encoding, via email
-- SMS
-- SQS
-- SNS endpoint
-- Lambda
-
-When you choose certain types of subscription, you also need to specify an endpoint. For example, if you chose to use the SMS subscription type, you'd also need to add the phone number... otherwise, we don't know where to send a message to.
-
-To create an email subscription, run:
-
-```
-aws sns subscribe --topic-arn SNSTOPICARN --protocol email --notification-endpoint YOUREMAILADDRESS
-```
-
-Replace SNSTOPICARN and YOUREMAILADDRESS with the appropriate values.
-
-In response, SNS should return `Pending Confirmation`. We can now see our pending subscription by running:
-
-```
-aws sns list-subscriptions
-```
-
-There are multiple ways to confirm a subscription - SNS will have sent an email to you, so you could confirm the subscription by clicking the link in the email. Alternatively, you can run:
-
-```
-aws sns confirm-subscription --topic-arn SNSTOPICARN --token TOKEN
-```
-
-The value for TOKEN can be found by parsing the email sent to you.
-
-After you've subscribed, if you `list-subscriptions` once more, you should find that the `SubscriptionARN` field no longer references `Pending Confirmation`, but instead provides a full ARN.
 
 ## Conclusion
 
 In this workshop, we created:
 
+- a VPC
+- a CloudWatch Logs log group
 - an S3 bucket
 - an SNS topic
-- a Lambda function
 - a Config Rule
-- and associated roles for Lambda and Config to make use of
+- associated IAM roles and policies
 
 We now have a situation where detection of VPC Flow Logs is automated for us, and we are alerted when VPCs exist without Flow Logs.
 
 To expand this, we could look at using:
+
+- AWS GuardDuty, to perform machine learning on our security configuration
