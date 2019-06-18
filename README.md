@@ -69,7 +69,7 @@ Right-click your new VPC, and choose Create Flow Log.
 7. Choose your shiny new IAM role. It'll likely be called `flowlogsRole`.
 8. Click Create.
 
-## Step 1: Set up Config
+## Step 2: Set up Config
 
 AWS Config requires access to an Amazon S3 bucket in order to store compliance results, an SNS topic to send compliance results to the bucket from Config, and an IAM role to set the appropriate permissions for the IAM user, the S3 bucket and the SNS topic.
 
