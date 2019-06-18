@@ -156,7 +156,7 @@ We now have a situation where detection of VPC Flow Logs is automated for us, an
 
 ## Appendix 1: Using GuardDuty
 
-Amazon GuardDuty is a threat detection service which continuously monitors for malicious activity and unauthorised behaviour occurring in your AWS account. GuardDuty uses managed rule sets and threat intelligence from the AWS Security teams and trusted third parties, coupled with machine learning, to scan VPC Flow Logs, DNS logs and other sources for malicious behaviour.
+[Amazon GuardDuty](https://aws.amazon.com/guardduty) is a threat detection service which continuously monitors for malicious activity and unauthorised behaviour occurring in your AWS account. GuardDuty uses managed rule sets and threat intelligence from the AWS Security teams and trusted third parties, coupled with machine learning, to scan VPC Flow Logs, DNS logs and other sources for malicious behaviour.
 
 We're going to enable GuardDuty and use the `guardduty-enabled-centralized` managed rule in AWS Config. Optionally, this rule takes one parameter - `CentralMonitoringAccount` - which is the account number of a centralised monitoring account which GuardDuty might be pushing findings to. Since we only have one account in our scenario, we're not going to set this parameter.
 
