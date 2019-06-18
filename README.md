@@ -154,7 +154,15 @@ In this workshop, we created:
 
 We now have a situation where detection of VPC Flow Logs is automated for us, and we are alerted when VPCs exist without Flow Logs.
 
-## Appendix 1: Using GuardDuty
+## Appendix 1: Confirming AWS CloudTrail trails are enabled
+
+[AWS CloudTrail](https://aws.amazon.com/cloudtrail) tracks API usage of AWS services by specific users. It's a particularly useful service for troubleshooting, but also for understanding what happened after a security incident. By default, AWS CloudTrail trails are enabled, but they can be disabled. Requirement 2.1 of the CIS Benchmark, a Level 1 requirement, is to ensure that CloudTrail is enabled in all regions.
+
+To ensure that they haven't been disabled, we can use a Config rule to check that CloudTrail trails have been enabled. We can then go further and check that they are enabled in all regions. This is important to ensure that security issues are able to be caught in more than the primary region you likely consider yourself to be resident in.
+
+First,
+
+## Appendix 2: Using Amazon GuardDuty
 
 [Amazon GuardDuty](https://aws.amazon.com/guardduty) is a threat detection service which continuously monitors for malicious activity and unauthorised behaviour occurring in your AWS account. GuardDuty uses managed rule sets and threat intelligence from the AWS Security teams and trusted third parties, coupled with machine learning, to scan VPC Flow Logs, DNS logs and other sources for malicious behaviour.
 
