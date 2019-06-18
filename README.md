@@ -154,6 +154,25 @@ In this workshop, we created:
 
 We now have a situation where detection of VPC Flow Logs is automated for us, and we are alerted when VPCs exist without Flow Logs.
 
-To expand this, we could look at using:
+## Appendix 1: Using GuardDuty
 
-- AWS GuardDuty, to perform machine learning on our security configuration
+Amazon GuardDuty is a threat detection service which continuously monitors for malicious activity and unauthorised behaviour occurring in your AWS account. GuardDuty uses managed rule sets and threat intelligence from the AWS Security teams and trusted third parties, coupled with machine learning, to scan VPC Flow Logs, DNS logs and other sources for malicious behaviour.
+
+We're going to enable GuardDuty and use the `guardduty-enabled-centralized` managed rule in AWS Config. Optionally, this rule takes one parameter - `CentralMonitoringAccount` - which is the account number of a centralised monitoring account which GuardDuty might be pushing findings to. Since we only have one account in our scenario, we're not going to set this parameter.
+
+GuardDuty can be enabled using the AWS CLI. Let's do that by running:
+
+```
+aws guardduty create-detector --enable --finding-publishing-frequency FIFTEEN_MINUTES
+```
+
+The `finding-publishing-frequency` parameter takes one of three values: `FIFTEEN_MINUTES`, `ONE_HOUR` and `SIX_HOURS`.
+
+In response to the above command, you should receive a Detector ID in response. We're going to ignore this value, since we don't need to make a note of it for our purpose here.
+
+Head back to the Config console in your browser, at https://console.aws.amazon.com/config.
+
+1. Click Rules on the left.
+2. Search for the `guardduty-enabled-centralized` rule, and enable it.
+3. Skip the setting to set the `CentralMonitoringAccount` value.
+4. Save, and wait for the finding to evaluate.
