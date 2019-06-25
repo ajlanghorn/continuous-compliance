@@ -160,9 +160,28 @@ We now have a situation where detection of VPC Flow Logs is automated for us, an
 
 To ensure that they haven't been disabled, we can use a Config rule to check that CloudTrail trails have been enabled. We can then go further and check that they are enabled in all regions. This is important to ensure that security issues are able to be caught in more than the primary region you likely consider yourself to be resident in.
 
-First,
+The in-built rule we're using for this is called `cloudtrail-enabled`, so go ahead and set that up by clicking Rules on the left of the Config Rules console, finding the rule, and enabling it. Now, either wait a moment or two for the rule to become compliant. If it doesn't, examine why this might be the case - hint: you'll be looking at using CloudTrail's console for that!
 
-## Appendix 2: Using Amazon GuardDuty
+Finally, repeat the same steps for the `multi-region-cloudtrail-enabled` rule. Check to see whether the rule is compliant or not. See if you can fix the issue if it's not compliant. You might have to wait a little while before Config picks up on non-compliance, though...
+
+## Appendix 2: Using Config Aggregators
+
+One very powerful feature of Config is aggregation, which allows you to gather together compliance status from various accounts in one single pane of glass. Your auditors and security teams (if you're not already sitting inside one of these!) will love you if you enable this, and give them access.
+
+To create an aggregator, open the Config console, and click Aggregators on the left, under Aggregated View.
+
+1. We need to give Config access to duplicate events from other accounts in to this account. Allow this to occur.
+2. Give your aggregator a name.
+
+At this point, if you're running in an Organization, you could add all accounts in your organization with one click, so long as you have a valid IAM role. Since we're not running in this scenario right now, let's ignore that section, and choose instead to provide account IDs.
+
+3. Add `952997488945` as the account ID, alongside any others you wish to use.
+4. Optionally, choose regions to monitor. I'd strongly recommend choosing to monitor all regions.
+5. Select to include future AWS regions.
+
+Your aggregator should now be created, and you can click through to it to get access to the aggregation dashboard. Data might take a few moments to arrive, as events are replicated from the source AWS account(s) you chose to this one.
+
+## Appendix 3: Using Amazon GuardDuty
 
 [Amazon GuardDuty](https://aws.amazon.com/guardduty) is a threat detection service which continuously monitors for malicious activity and unauthorised behaviour occurring in your AWS account. GuardDuty uses managed rule sets and threat intelligence from the AWS Security teams and trusted third parties, coupled with machine learning, to scan VPC Flow Logs, DNS logs and other sources for malicious behaviour.
 
@@ -174,9 +193,11 @@ GuardDuty can be enabled using the AWS CLI. Let's do that by running:
 aws guardduty create-detector --enable --finding-publishing-frequency FIFTEEN_MINUTES
 ```
 
-The `finding-publishing-frequency` parameter takes one of three values: `FIFTEEN_MINUTES`, `ONE_HOUR` and `SIX_HOURS`.
+The `finding-publishing-frequency` parameter takes one of three values: `FIFTEEN_MINUTES`, `ONE_HOUR` and `SIX_HOURS`. You should receive a Detector ID in response. Copy this value as `<DETECTOR_ID>` in the below command:
 
-In response to the above command, you should receive a Detector ID in response. We're going to ignore this value, since we don't need to make a note of it for our purpose here.
+```
+aws guardduty create-sample-findings --detector-id <DETECTOR_ID>
+```
 
 Head back to the Config console in your browser, at https://console.aws.amazon.com/config.
 
@@ -184,3 +205,9 @@ Head back to the Config console in your browser, at https://console.aws.amazon.c
 2. Search for the `guardduty-enabled-centralized` rule, and enable it.
 3. Skip the setting to set the `CentralMonitoringAccount` value.
 4. Save, and wait for the finding to evaluate.
+
+Interested in GuardDuty? Go take a look at the GuardDuty console at https://console.aws.amazon.com/guardduty. You should see some sample findings have been created, which lets you explore GuardDuty a little more.
+
+## Thank you!
+
+Thank you for spending some time with me exploring GuardDuty, Config, Config Rules, Config Aggregators and CloudTrail. Services such as this, and others such as Inspector, are helpful in ensuring compliance, especially in regulated or large organisations. I often hear that compliance is a concern with my own customers, but it doesn't have to be difficult using the services we provide natively.
